@@ -1,387 +1,393 @@
-#!/usr/bin/env python3
-"""Professional Scientific Calculator with Modern Dark Theme GUI using tkinter."""
-
+import tkinter as tk
+from tkinter import messagebox, ttk
 import json
 import math
-import tkinter as tk
-from tkinter import messagebox, scrolledtext
 from datetime import datetime
 from pathlib import Path
 
 
-class ScientificCalculator:
-    """A scientific calculator that evaluates expressions and maintains calculation history."""
-    
-    HISTORY_FILE = "history.json"
-    
-    def __init__(self):
-        """Initialize the calculator and load history."""
-        self.history = self._load_history()
-    
-    def _load_history(self):
-        """Load calculation history from JSON file."""
-        if Path(self.HISTORY_FILE).exists():
-            try:
-                with open(self.HISTORY_FILE, 'r') as f:
-                    return json.load(f)
-            except (json.JSONDecodeError, IOError):
-                return []
-        return []
-    
-    def _save_history(self):
-        """Save calculation history to JSON file."""
-        try:
-            with open(self.HISTORY_FILE, 'w') as f:
-                json.dump(self.history, f, indent=2)
-        except IOError as e:
-            raise IOError(f"Could not save history: {e}")
-    
-    def _add_to_history(self, expression, result):
-        """Add a calculation to history with timestamp."""
-        entry = {
-            "expression": expression,
-            "result": result,
-            "timestamp": datetime.now().isoformat()
-        }
-        self.history.append(entry)
-        self._save_history()
-    
-    def _validate_expression(self, expression):
-        """Validate expression syntax before evaluation."""
-        if expression.count('(') != expression.count(')'):
-            raise SyntaxError("Unbalanced parentheses")
-        
-        allowed_chars = set('0123456789+-*/(). ,sqrtsincoswpie^')
-        if not all(c.lower() in allowed_chars for c in expression.replace(' ', '')):
-            raise SyntaxError("Unsupported characters")
-    
-    def evaluate(self, expression):
-        """
-        Safely evaluate a mathematical expression.
-        Supports: +, -, *, /, (, ), sqrt(), sin(), cos(), pow(), ^
-        """
-        try:
-            self._validate_expression(expression)
-            
-            expression = expression.replace('^', '**')
-            
-            safe_dict = {
-                '__builtins__': {},
-                'sqrt': math.sqrt,
-                'sin': math.sin,
-                'cos': math.cos,
-                'pow': math.pow,
-                'pi': math.pi,
-                'e': math.e
-            }
-            
-            result = eval(expression, safe_dict)
-            self._add_to_history(expression, result)
-            
-            return result
-        
-        except ZeroDivisionError:
-            raise ValueError("Division by zero")
-        except SyntaxError as e:
-            raise SyntaxError(f"Invalid syntax: {str(e)}")
-        except NameError as e:
-            raise SyntaxError(f"Unknown function or variable: {str(e)}")
-        except ValueError as e:
-            raise ValueError(f"Math error: {str(e)}")
-        except Exception as e:
-            raise ValueError(f"Error: {str(e)}")
-    
-    def clear_history(self):
-        """Clear all calculation history."""
-        self.history = []
-        self._save_history()
-
-
-class CalculatorGUI:
-    """Modern Dark Theme GUI Calculator using tkinter."""
-    
-    # Color scheme
-    COLORS = {
-        'bg': '#1e1e1e',           # Dark background
-        'fg': '#ffffff',           # White text
-        'display_bg': '#2d2d2d',   # Display background
-        'button_number': '#3d3d3d', # Number buttons
-        'button_operator': '#ff9500', # Operator buttons
-        'button_function': '#0d8fc7', # Function buttons
-        'button_equals': '#4caf50',   # Equals button
-        'button_clear': '#f44336',    # Clear button
-        'accent': '#0d8fc7'
-    }
-    
+class Calculator:
     def __init__(self, root):
-        """Initialize the GUI calculator."""
         self.root = root
-        self.calculator = ScientificCalculator()
-        self.current_input = ""
-        self.last_result = None
-        
-        self._setup_window()
-        self._create_widgets()
-    
-    def _setup_window(self):
-        """Configure the main window."""
-        self.root.title("Professional Scientific Calculator")
-        self.root.geometry("500x700")
-        self.root.configure(bg=self.COLORS['bg'])
+        self.root.title("Scientific Calculator")
+        self.root.geometry("350x600")
         self.root.resizable(False, False)
-    
-    def _create_widgets(self):
-        """Create and layout all GUI widgets."""
-        # Main container
-        container = tk.Frame(self.root, bg=self.COLORS['bg'])
-        container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        # Title
-        title = tk.Label(
-            container, text="🧮 Scientific Calculator",
-            font=("Arial", 20, "bold"), fg=self.COLORS['fg'],
-            bg=self.COLORS['bg']
+        # Color scheme
+        self.bg_dark = "#1e1e1e"
+        self.btn_num = "#333333"
+        self.btn_op = "#4b4b4b"
+        self.btn_equal = "#0078d7"
+        self.text_color = "#ffffff"
+        self.hover_color = "#404040"
+        
+        self.root.configure(bg=self.bg_dark)
+        
+        # Initialize state
+        self.expression = ""
+        self.result = ""
+        self.mode = "calculator"
+        self.history_file = Path("history.json")
+        
+        # Setup UI
+        self.setup_display()
+        self.setup_menu()
+        self.setup_calculator()
+        
+    def setup_display(self):
+        """Create two-line display"""
+        display_frame = tk.Frame(self.root, bg=self.bg_dark)
+        display_frame.pack(fill=tk.BOTH, padx=10, pady=10)
+        
+        # Expression display
+        self.expr_label = tk.Label(
+            display_frame, text="", bg="#2a2a2a", fg="#888888",
+            font=("Arial", 12), anchor="e", padx=10, pady=5
         )
-        title.pack(pady=(0, 10))
+        self.expr_label.pack(fill=tk.BOTH, pady=(0, 5))
         
-        # Display area
-        display_frame = tk.Frame(container, bg=self.COLORS['display_bg'], relief=tk.SUNKEN, bd=2)
-        display_frame.pack(fill=tk.X, pady=(0, 15))
-        
-        self.display = tk.Entry(
-            display_frame, font=("Arial", 24, "bold"),
-            fg=self.COLORS['accent'], bg=self.COLORS['display_bg'],
-            border=0, justify=tk.RIGHT
+        # Result display
+        self.result_label = tk.Label(
+            display_frame, text="0", bg="#2a2a2a", fg=self.text_color,
+            font=("Arial", 28, "bold"), anchor="e", padx=10, pady=10
         )
-        self.display.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        self.display.bind('<Return>', lambda e: self._evaluate())
-        self.display.bind('<BackSpace>', lambda e: self._backspace())
+        self.result_label.pack(fill=tk.BOTH)
         
-        # Button grid
-        self._create_button_grid(container)
+    def setup_menu(self):
+        """Create menu bar with Mode toggle and History"""
+        menubar = tk.Menu(self.root)
+        self.root.config(menu=menubar)
         
-        # History button at bottom
-        history_btn = tk.Button(
-            container, text="📋 History",
-            font=("Arial", 11, "bold"), bg=self.COLORS['accent'],
-            fg=self.COLORS['fg'], command=self._show_history,
-            relief=tk.FLAT, padx=10, pady=8
-        )
-        history_btn.pack(fill=tk.X, pady=(10, 0))
-    
-    def _create_button_grid(self, parent):
-        """Create the calculator button grid."""
-        grid_frame = tk.Frame(parent, bg=self.COLORS['bg'])
-        grid_frame.pack(fill=tk.BOTH, expand=True)
+        mode_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Mode", menu=mode_menu)
+        mode_menu.add_command(label="Calculator", command=self.show_calculator)
+        mode_menu.add_command(label="Unit Converter", command=self.show_converter)
         
-        # Button layout: [label, button_type]
-        buttons = [
-            # Row 1: Functions
-            [("√", "func"), ("^", "operator"), ("sin", "func"), ("cos", "func"), ("C", "clear")],
-            # Row 2: Numbers and operations
-            [("7", "number"), ("8", "number"), ("9", "number"), ("/", "operator"), ("(", "operator")],
-            # Row 3
-            [("4", "number"), ("5", "number"), ("6", "number"), ("*", "operator"), (")", "operator")],
-            # Row 4
-            [("1", "number"), ("2", "number"), ("3", "number"), ("-", "operator"), ("π", "func")],
-            # Row 5
-            [("0", "number"), (".", "number"), ("e", "func"), ("+", "operator"), ("=", "equals")],
-        ]
+        hist_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="History", menu=hist_menu)
+        hist_menu.add_command(label="View History", command=self.view_history)
+        hist_menu.add_command(label="Clear History", command=self.clear_history)
         
-        for row in buttons:
-            row_frame = tk.Frame(grid_frame, bg=self.COLORS['bg'])
-            row_frame.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
-            
-            for label, btn_type in row:
-                self._create_button(row_frame, label, btn_type)
-    
-    def _create_button(self, parent, label, btn_type):
-        """Create a single calculator button."""
-        if btn_type == "number":
-            bg = self.COLORS['button_number']
-            fg = self.COLORS['fg']
-        elif btn_type == "operator":
-            bg = self.COLORS['button_operator']
-            fg = self.COLORS['bg']
-        elif btn_type == "func":
-            bg = self.COLORS['button_function']
-            fg = self.COLORS['fg']
-        elif btn_type == "equals":
-            bg = self.COLORS['button_equals']
-            fg = self.COLORS['fg']
-        else:  # clear
-            bg = self.COLORS['button_clear']
-            fg = self.COLORS['fg']
+    def setup_calculator(self):
+        """Create calculator button grid"""
+        calc_frame = tk.Frame(self.root, bg=self.bg_dark)
+        calc_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Top row: AC, DEL, (, ), /
+        top_row = tk.Frame(calc_frame, bg=self.bg_dark)
+        top_row.pack(fill=tk.X, pady=(0, 5))
+        
+        self.create_button("AC", top_row, 0, 0, self.clear_all, "#5a0000")
+        self.create_button("DEL", top_row, 1, 0, self.delete_last, "#5a0000")
+        self.create_button("(", top_row, 2, 0, lambda: self.append_char("("))
+        self.create_button(")", top_row, 3, 0, lambda: self.append_char(")"))
+        self.create_button("÷", top_row, 4, 0, lambda: self.append_char("/"))
+        
+        # Scientific row
+        sci_row = tk.Frame(calc_frame, bg=self.bg_dark)
+        sci_row.pack(fill=tk.X, pady=(0, 5))
+        
+        self.create_button("√", sci_row, 0, 0, lambda: self.append_char("sqrt("))
+        self.create_button("∛", sci_row, 1, 0, lambda: self.append_char("cbrt("))
+        self.create_button("log₁₀", sci_row, 2, 0, lambda: self.append_char("log10("))
+        self.create_button("ln", sci_row, 3, 0, lambda: self.append_char("log("))
+        self.create_button("^", sci_row, 4, 0, lambda: self.append_char("**"))
+        
+        # Main grid
+        main_frame = tk.Frame(calc_frame, bg=self.bg_dark)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Numbers 7-8-9
+        row1 = tk.Frame(main_frame, bg=self.bg_dark)
+        row1.pack(fill=tk.X, pady=(0, 5))
+        self.create_button("7", row1, 0, 0)
+        self.create_button("8", row1, 1, 0)
+        self.create_button("9", row1, 2, 0)
+        self.create_button("×", row1, 4, 0, lambda: self.append_char("*"), color=self.btn_op)
+        
+        # Numbers 4-5-6
+        row2 = tk.Frame(main_frame, bg=self.bg_dark)
+        row2.pack(fill=tk.X, pady=(0, 5))
+        self.create_button("4", row2, 0, 0)
+        self.create_button("5", row2, 1, 0)
+        self.create_button("6", row2, 2, 0)
+        self.create_button("−", row2, 4, 0, lambda: self.append_char("-"), color=self.btn_op)
+        
+        # Numbers 1-2-3
+        row3 = tk.Frame(main_frame, bg=self.bg_dark)
+        row3.pack(fill=tk.X, pady=(0, 5))
+        self.create_button("1", row3, 0, 0)
+        self.create_button("2", row3, 1, 0)
+        self.create_button("3", row3, 2, 0)
+        self.create_button("+", row3, 4, 0, lambda: self.append_char("+"), color=self.btn_op)
+        
+        # Bottom row: 0, ., =
+        row4 = tk.Frame(main_frame, bg=self.bg_dark)
+        row4.pack(fill=tk.X)
+        self.create_button("0", row4, 0, 0, width=2)
+        self.create_button(".", row4, 2, 0)
+        self.create_button("=", row4, 4, 0, self.calculate, color=self.btn_equal)
+        
+    def create_button(self, text, parent, col, row, command=None, color=None, width=1):
+        """Create styled button"""
+        if command is None:
+            command = lambda t=text: self.append_char(t)
+        
+        if color is None:
+            color = self.btn_num
         
         btn = tk.Button(
-            parent, text=label, font=("Arial", 14, "bold"),
-            bg=bg, fg=fg, relief=tk.FLAT,
-            command=lambda: self._handle_button_click(label, btn_type),
-            activebackground=self._lighten_color(bg),
-            activeforeground=fg
+            parent, text=text, font=("Arial", 14, "bold"),
+            bg=color, fg=self.text_color, activebackground=self.hover_color,
+            activeforeground=self.text_color, relief=tk.FLAT,
+            padx=10, pady=10, command=command, cursor="hand2"
         )
-        btn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=2, pady=2)
-    
-    def _lighten_color(self, color):
-        """Lighten a hex color slightly for hover effect."""
-        color = color.lstrip('#')
-        r, g, b = tuple(int(color[i:i+2], 16) for i in (0, 2, 4))
-        r, g, b = min(255, r + 30), min(255, g + 30), min(255, b + 30)
-        return f'#{r:02x}{g:02x}{b:02x}'
-    
-    def _handle_button_click(self, label, btn_type):
-        """Handle button click events."""
-        if btn_type == "clear":
-            self._clear_display()
-        elif btn_type == "equals":
-            self._evaluate()
-        elif label == "√":
-            self._insert_text("sqrt(")
-        elif label == "π":
-            self._insert_text("pi")
-        elif label == "e":
-            self._insert_text("e")
-        elif label == "sin":
-            self._insert_text("sin(")
-        elif label == "cos":
-            self._insert_text("cos(")
-        else:
-            self._insert_text(label)
-    
-    def _insert_text(self, text):
-        """Insert text into the display."""
-        current = self.display.get()
-        self.display.delete(0, tk.END)
-        self.display.insert(tk.END, current + text)
-        self.display.see(tk.END)
-    
-    def _backspace(self):
-        """Remove the last character."""
-        current = self.display.get()
-        self.display.delete(0, tk.END)
-        self.display.insert(tk.END, current[:-1])
-    
-    def _clear_display(self):
-        """Clear the display."""
-        self.display.delete(0, tk.END)
-        self.current_input = ""
-    
-    def _evaluate(self):
-        """Evaluate the expression and display result."""
-        expression = self.display.get().strip()
+        btn.grid(row=row, column=col, sticky="nsew", padx=2, pady=2)
+        parent.grid_columnconfigure(col, weight=width)
         
-        if not expression:
-            return
+    def append_char(self, char):
+        """Append character to expression"""
+        self.expression += char
+        self.update_display()
         
+    def update_display(self):
+        """Update display labels"""
+        self.expr_label.config(text=self.expression)
         try:
-            result = self.calculator.evaluate(expression)
-            self.last_result = result
-            self.display.delete(0, tk.END)
-            
-            if isinstance(result, float):
-                if result == int(result):
-                    self.display.insert(tk.END, str(int(result)))
-                else:
-                    self.display.insert(tk.END, f"{result:.10g}")
+            if self.expression:
+                result = self.safe_eval(self.expression)
+                self.result = str(result)
             else:
-                self.display.insert(tk.END, str(result))
+                self.result = "0"
+        except:
+            self.result = "Error"
+        
+        self.result_label.config(text=self.result)
+        
+    def safe_eval(self, expr):
+        """Safely evaluate mathematical expression"""
+        # Replace symbols
+        expr = expr.replace("÷", "/").replace("×", "*").replace("−", "-")
+        
+        # Create safe namespace
+        safe_dict = {
+            "sqrt": math.sqrt,
+            "cbrt": lambda x: x ** (1/3),
+            "log10": math.log10,
+            "log": math.log,
+            "sin": math.sin,
+            "cos": math.cos,
+            "tan": math.tan,
+            "pi": math.pi,
+            "e": math.e,
+        }
+        
+        result = eval(expr, {"__builtins__": {}}, safe_dict)
+        
+        # Round to 10 decimals to avoid floating point errors
+        if isinstance(result, float):
+            result = round(result, 10)
+        
+        return result
+        
+    def calculate(self):
+        """Calculate result and save to history"""
+        try:
+            if not self.expression:
+                return
             
-        except (ValueError, SyntaxError) as e:
-            messagebox.showerror("Calculation Error", f"Error: {str(e)}")
-            self.display.delete(0, tk.END)
-            self.display.insert(tk.END, expression)
+            result = self.safe_eval(self.expression)
+            
+            # Save to history
+            self.save_history(self.expression, result)
+            
+            self.expression = str(result)
+            self.result = str(result)
+            self.update_display()
+            
+        except ZeroDivisionError:
+            messagebox.showerror("Math Error", "Division by zero")
+            self.result = "Error"
+            self.result_label.config(text=self.result)
+        except ValueError as e:
+            messagebox.showerror("Math Error", f"Invalid input: {str(e)}")
+            self.result = "Error"
+            self.result_label.config(text=self.result)
         except Exception as e:
-            messagebox.showerror("Error", f"Unexpected error: {str(e)}")
-    
-    def _show_history(self):
-        """Open a window to display calculation history."""
-        history_window = tk.Toplevel(self.root)
-        history_window.title("Calculation History")
-        history_window.geometry("600x400")
-        history_window.configure(bg=self.COLORS['bg'])
+            messagebox.showerror("Error", f"Calculation error: {str(e)}")
+            self.result = "Error"
+            self.result_label.config(text=self.result)
+            
+    def delete_last(self):
+        """Delete last character"""
+        self.expression = self.expression[:-1]
+        self.update_display()
         
-        # Header
-        header = tk.Label(
-            history_window, text="📋 Calculation History",
-            font=("Arial", 14, "bold"), fg=self.COLORS['fg'],
-            bg=self.COLORS['bg']
-        )
-        header.pack(pady=10)
+    def clear_all(self):
+        """Clear expression"""
+        self.expression = ""
+        self.result = "0"
+        self.update_display()
         
-        # Display history
-        if not self.calculator.history:
-            msg = tk.Label(
-                history_window, text="No calculations in history yet.",
-                font=("Arial", 12), fg=self.COLORS['accent'],
-                bg=self.COLORS['bg']
+    def save_history(self, expr, result):
+        """Save calculation to history.json"""
+        try:
+            history = []
+            if self.history_file.exists():
+                with open(self.history_file, 'r') as f:
+                    history = json.load(f)
+            
+            history.append({
+                "expression": expr,
+                "result": result,
+                "timestamp": datetime.now().isoformat()
+            })
+            
+            with open(self.history_file, 'w') as f:
+                json.dump(history, f, indent=2)
+        except Exception as e:
+            print(f"Error saving history: {e}")
+            
+    def view_history(self):
+        """Display history in a popup window"""
+        try:
+            if not self.history_file.exists():
+                messagebox.showinfo("History", "No history yet")
+                return
+            
+            with open(self.history_file, 'r') as f:
+                history = json.load(f)
+            
+            if not history:
+                messagebox.showinfo("History", "No history yet")
+                return
+            
+            # Create history window
+            hist_window = tk.Toplevel(self.root)
+            hist_window.title("Calculation History")
+            hist_window.geometry("400x300")
+            hist_window.configure(bg=self.bg_dark)
+            
+            # Create text widget
+            text_widget = tk.Text(
+                hist_window, bg="#2a2a2a", fg=self.text_color,
+                font=("Arial", 10), wrap=tk.WORD
             )
-            msg.pack(pady=20)
-        else:
-            text_widget = scrolledtext.ScrolledText(
-                history_window, font=("Courier", 10),
-                bg=self.COLORS['display_bg'], fg=self.COLORS['fg'],
-                relief=tk.SUNKEN, bd=2
-            )
-            text_widget.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
+            text_widget.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+            
+            # Add history
+            for item in reversed(history[-20:]):  # Show last 20
+                expr = item.get("expression", "")
+                result = item.get("result", "")
+                timestamp = item.get("timestamp", "")
+                
+                text_widget.insert(tk.END, f"{expr} = {result}\n")
+                text_widget.insert(tk.END, f"  {timestamp}\n\n")
+            
             text_widget.config(state=tk.DISABLED)
             
-            history_text = self._format_history()
-            text_widget.config(state=tk.NORMAL)
-            text_widget.insert(tk.END, history_text)
-            text_widget.config(state=tk.DISABLED)
-        
-        # Buttons
-        button_frame = tk.Frame(history_window, bg=self.COLORS['bg'])
-        button_frame.pack(fill=tk.X, padx=10, pady=10)
-        
-        if self.calculator.history:
-            clear_btn = tk.Button(
-                button_frame, text="Clear History",
-                font=("Arial", 10, "bold"), bg=self.COLORS['button_clear'],
-                fg=self.COLORS['fg'], command=lambda: self._clear_history(history_window),
-                relief=tk.FLAT, padx=10, pady=5
-            )
-            clear_btn.pack(side=tk.LEFT, padx=5)
-        
-        close_btn = tk.Button(
-            button_frame, text="Close",
-            font=("Arial", 10, "bold"), bg=self.COLORS['button_number'],
-            fg=self.COLORS['fg'], command=history_window.destroy,
-            relief=tk.FLAT, padx=10, pady=5
-        )
-        close_btn.pack(side=tk.RIGHT, padx=5)
-    
-    def _format_history(self):
-        """Format history entries for display."""
-        if not self.calculator.history:
-            return ""
-        
-        lines = []
-        for idx, entry in enumerate(self.calculator.history, 1):
-            expr = entry.get('expression', 'N/A')
-            result = entry.get('result', 'N/A')
-            timestamp = entry.get('timestamp', 'N/A')
+        except Exception as e:
+            messagebox.showerror("Error", f"Cannot load history: {e}")
             
-            lines.append(f"{idx}. {expr} = {result}")
-            lines.append(f"   Time: {timestamp}")
-            lines.append("")
-        
-        return "\n".join(lines)
-    
-    def _clear_history(self, window):
-        """Clear history with confirmation."""
+    def clear_history(self):
+        """Clear all history"""
         if messagebox.askyesno("Confirm", "Clear all history?"):
-            self.calculator.clear_history()
-            window.destroy()
-            messagebox.showinfo("Success", "History cleared!")
-
-
-def main():
-    """Entry point for the GUI calculator."""
-    root = tk.Tk()
-    gui = CalculatorGUI(root)
-    root.mainloop()
+            try:
+                if self.history_file.exists():
+                    self.history_file.unlink()
+                messagebox.showinfo("Success", "History cleared")
+            except Exception as e:
+                messagebox.showerror("Error", f"Cannot clear history: {e}")
+                
+    def show_calculator(self):
+        """Switch to calculator mode"""
+        self.root.geometry("350x600")
+        
+    def show_converter(self):
+        """Open unit converter window"""
+        converter_window = tk.Toplevel(self.root)
+        converter_window.title("Unit Converter")
+        converter_window.geometry("350x300")
+        converter_window.configure(bg=self.bg_dark)
+        
+        # Converter type selector
+        tk.Label(
+            converter_window, text="Conversion Type:", bg=self.bg_dark,
+            fg=self.text_color, font=("Arial", 11)
+        ).pack(pady=(10, 5))
+        
+        converter_var = tk.StringVar(value="length")
+        type_frame = tk.Frame(converter_window, bg=self.bg_dark)
+        type_frame.pack(pady=5)
+        
+        tk.Radiobutton(
+            type_frame, text="Length", variable=converter_var, value="length",
+            bg=self.bg_dark, fg=self.text_color, selectcolor=self.btn_op
+        ).pack(anchor=tk.W)
+        
+        tk.Radiobutton(
+            type_frame, text="Weight", variable=converter_var, value="weight",
+            bg=self.bg_dark, fg=self.text_color, selectcolor=self.btn_op
+        ).pack(anchor=tk.W)
+        
+        tk.Radiobutton(
+            type_frame, text="Temperature", variable=converter_var, value="temp",
+            bg=self.bg_dark, fg=self.text_color, selectcolor=self.btn_op
+        ).pack(anchor=tk.W)
+        
+        # Input fields
+        tk.Label(
+            converter_window, text="From:", bg=self.bg_dark,
+            fg=self.text_color, font=("Arial", 10)
+        ).pack(pady=(10, 0))
+        
+        from_entry = tk.Entry(
+            converter_window, bg="#333333", fg=self.text_color,
+            font=("Arial", 11), width=20
+        )
+        from_entry.pack(pady=5)
+        
+        tk.Label(
+            converter_window, text="To:", bg=self.bg_dark,
+            fg=self.text_color, font=("Arial", 10)
+        ).pack()
+        
+        to_label = tk.Label(
+            converter_window, text="0", bg="#2a2a2a", fg=self.text_color,
+            font=("Arial", 14, "bold"), padx=10, pady=10
+        )
+        to_label.pack(fill=tk.X, padx=20, pady=5)
+        
+        def do_convert():
+            try:
+                value = float(from_entry.get())
+                conv_type = converter_var.get()
+                
+                if conv_type == "length":
+                    # cm to inches
+                    result = value / 2.54
+                    to_label.config(text=f"{result:.4f} inches")
+                elif conv_type == "weight":
+                    # kg to pounds
+                    result = value * 2.20462
+                    to_label.config(text=f"{result:.4f} lbs")
+                elif conv_type == "temp":
+                    # Celsius to Fahrenheit
+                    result = (value * 9/5) + 32
+                    to_label.config(text=f"{result:.2f} °F")
+            except ValueError:
+                messagebox.showerror("Error", "Invalid input")
+        
+        from_entry.bind("<KeyRelease>", lambda e: do_convert())
+        
+        tk.Button(
+            converter_window, text="Convert", command=do_convert,
+            bg=self.btn_equal, fg=self.text_color,
+            font=("Arial", 11, "bold"), padx=20, pady=10
+        ).pack(pady=10)
 
 
 if __name__ == "__main__":
-    main()
+    root = tk.Tk()
+    app = Calculator(root)
+    root.mainloop()
